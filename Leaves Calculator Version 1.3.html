@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام احتساب الإجازات - النسخة المستقرة</title>
+    
+    <!-- PWA Metadata -->
+    <meta name="theme-color" content="#2A3D71">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <link rel="manifest" href='data:application/manifest+json,{"name":"متابع الإجازات الذكي","short_name":"إجازاتي","start_url":".","display":"standalone","background_color":"#ffffff","theme_color":"#2A3D71","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/2664/2664627.png","sizes":"512x512","type":"image/png"}]}'>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body { background-color: #f1f5f9; -webkit-tap-highlight-color: transparent; }
+        body[dir="rtl"] { font-family: 'Sultan Medium', sans-serif; }
+        
+        .card { background: white; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .gs-cell { border-bottom: 1px solid #f1f5f9; padding: 12px 8px; }
+        
+        /* Custom Colors */
+        input, select { border: 1px solid #dbe5f3; border-radius: 8px; padding: 10px; width: 100%; outline: none; transition: all 0.2s; background-color: white; }
+        input:focus, select:focus { border-color: #2A3D71; box-shadow: 0 0 0 3px rgba(42, 61, 113, 0.1); }
+        input[readonly] { background-color: #f9fafb; color: #475569; cursor: not-allowed; border-style: dashed; }
+        
+        .highlight-row { background-color: #f1f5f9; border-inline-start: 4px solid #2A3D71 !important; }
+        
+        .tab-btn { flex: 1; padding: 14px; text-align: center; font-weight: bold; font-size: 11px; color: #64748b; border-bottom: 3px solid transparent; transition: 0.3s; white-space: nowrap; }
+        .tab-btn.active { color: #2A3D71; border-bottom-color: #F5C416; background-color: #fcfcfc; }
+
+        .action-select-btn { background-color: #DBE5F3; color: #2A3D71; padding: 6px 12px; border-radius: 8px; font-weight: bold; font-size: 10px; border: 1px solid #cad5e6; transition: 0.2s; cursor: pointer; }
+        .action-select-btn:hover { background-color: #2A3D71; color: white; border-color: #2A3D71; }
+        
+        .action-delete-btn { color: #ef4444; cursor: pointer; padding: 8px; transition: 0.2s; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; }
+        .action-delete-btn:hover { background-color: #fee2e2; transform: scale(1.1); }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+
+        .custom-dropdown-list {
+            position: absolute; top: 100%; right: 0; left: 0; background: white; border: 1px solid #DBE5F3; border-top: none; border-radius: 0 0 12px 12px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); z-index: 100; max-height: 160px; overflow-y: auto; display: none;
+        }
+        .custom-dropdown-item {
+            padding: 10px 12px; cursor: pointer; font-size: 11px; color: #475569; transition: all 0.2s; border-bottom: 1px solid #f8fafc;
+        }
+        .custom-dropdown-item:last-child { border-bottom: none; }
+        .custom-dropdown-item:hover { background-color: #f1f5f9; color: #2A3D71; padding-right: 18px; font-weight: 600; }
+
+        .btn-accent { background-color: #F5C416; color: #2A3D71; transition: all 0.3s ease; }
+        .btn-accent:hover { background-color: #e0b214; box-shadow: 0 4px 10px rgba(245, 196, 22, 0.3); }
+        
+        .header-logo { max-height: 50px; width: auto; filter: brightness(0) invert(1); }
+
+        .input-clear-btn { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; cursor: pointer; font-size: 14px; transition: color 0.2s; display: none; user-select: none; }
+        .relative:hover .input-clear-btn { display: block; }
+        .input-clear-btn:hover { color: #ef4444; }
+        
+        /* تصميم التبويبات الفرعية */
+        .sub-tab-btn { flex: 1; padding: 14px; text-align: center; font-weight: bold; font-size: 11px; color: #64748b; border-bottom: 3px solid transparent; transition: 0.3s; white-space: nowrap; background-color: white; }
+        .sub-tab-btn.active { color: #2A3D71; border-bottom-color: #2A3D71; background-color: #fcfcfc; }
+
+        /* Auth Overlay */
+        #authOverlay { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #1e2a4a 0%, #2A3D71 50%, #3a5299 100%); }
+        #authOverlay .auth-card { background: white; border-radius: 20px; padding: 40px 32px; width: 100%; max-width: 380px; box-shadow: 0 25px 60px rgba(0,0,0,0.3); }
+        #authOverlay input { direction: ltr; text-align: left; }
+        .auth-hidden { display: none !important; }
+
+        /* Loading Overlay */
+        #loadingOverlay { position: fixed; inset: 0; z-index: 150; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.25); backdrop-filter: blur(2px); }
+        .spinner { width: 40px; height: 40px; border: 4px solid #2A3D71; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="safe-area-inset-top" dir="rtl">
+
+    <!-- Auth Overlay -->
+    <div id="authOverlay">
+        <div class="auth-card text-center">
+            <div class="mb-6">
+                <div class="w-16 h-16 bg-[#2A3D71] rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl shadow-lg">📋</div>
+                <h2 class="text-xl font-bold text-[#2A3D71] mb-1">نظام احتساب الإجازات</h2>
+                <p class="text-xs text-gray-400">سجّل دخولك للمتابعة</p>
+            </div>
+            <div class="space-y-3 text-start">
+                <input type="email" id="authEmail" placeholder="البريد الإلكتروني" class="text-sm h-11">
+                <input type="password" id="authPassword" placeholder="كلمة المرور" class="text-sm h-11">
+                <p id="authError" class="text-red-500 text-xs font-bold min-h-[1.2em] text-center"></p>
+                <button onclick="handleAuth('signin')" class="w-full bg-[#2A3D71] text-white py-3 rounded-xl font-bold text-sm shadow-md hover:opacity-90 transition-all">تسجيل الدخول</button>
+                <button onclick="handleAuth('signup')" class="w-full bg-[#F5C416] text-[#2A3D71] py-3 rounded-xl font-bold text-sm shadow-md hover:opacity-90 transition-all">إنشاء حساب جديد</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="auth-hidden">
+        <div class="card p-6 text-center shadow-xl" style="border-radius:16px">
+            <div class="spinner"></div>
+            <p class="text-sm text-gray-600 font-bold">جاري تحميل البيانات...</p>
+        </div>
+    </div>
+
+    <!-- Notification Modal -->
+    <div id="notificationModal" class="hidden fixed inset-0 z-[120] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onclick="closeNotification()"></div>
+        <div id="notificationCard" class="relative card w-full max-w-xs p-6 text-center transform transition-all shadow-2xl border-t-4 border-[#2A3D71]">
+            <div id="notificationIcon" class="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl text-center"></div>
+            <h3 id="notificationTitle" class="text-base font-bold text-gray-800 mb-2"></h3>
+            <p id="notificationText" class="text-xs text-gray-500 mb-6 leading-relaxed text-center"></p>
+            <button onclick="closeNotification()" class="w-full bg-[#2A3D71] text-white py-2.5 rounded-xl font-bold text-sm shadow-md">موافق</button>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="resetModal" class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onclick="closeResetModal()"></div>
+        <div class="relative card w-full max-w-sm p-6 text-center shadow-2xl">
+            <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl text-center">⚠️</div>
+            <h3 class="text-lg font-bold text-gray-800 mb-2 text-center">تأكيد الإجراء</h3>
+            <p id="modalMessage" class="text-sm text-gray-500 mb-6 text-center"></p>
+            <div class="flex gap-3 text-start">
+                <button id="modalConfirmBtn" class="flex-1 bg-red-600 text-white py-2 rounded-xl font-bold">نعم، متأكد</button>
+                <button onclick="closeResetModal()" class="flex-1 bg-gray-100 text-gray-600 py-2 rounded-xl font-bold">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Container (hidden until authenticated) -->
+    <div id="appContainer" class="auth-hidden">
+
+    <!-- App Header -->
+    <div class="bg-[#2A3D71] text-white p-6 pb-12 rounded-b-[40px] shadow-lg text-start border-b-4 border-[#F5C416]">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-3 text-start">
+            <div class="flex items-center gap-4">
+                <img src="Picture1.png" alt="Logo" class="header-logo" onerror="this.style.display='none'">
+                <h1 class="text-xl font-bold text-start">نظام احتساب الإجازات</h1>
+            </div>
+            <div class="flex gap-2 flex-wrap justify-center items-center text-start">
+                <span id="userEmailDisplay" class="text-[9px] text-blue-200 px-2 py-1 bg-white/10 rounded-full"></span>
+                <button onclick="handleSignOut()" class="bg-white/20 text-white text-[9px] px-3 py-1.5 rounded-full font-bold shadow-sm hover:bg-red-500 transition-all">خروج 🚪</button>
+                <button onclick="document.getElementById('backupFile').click()" class="bg-[#415385] text-white text-[9px] px-3 py-1.5 rounded-full font-bold shadow-sm hover:bg-[#F5C416] hover:text-[#2A3D71] transition-all">استعادة 📂</button>
+                <button onclick="exportBackup()" class="bg-[#415385] text-white text-[9px] px-3 py-1.5 rounded-full font-bold shadow-sm hover:bg-[#F5C416] hover:text-[#2A3D71] transition-all">حفظ 💾</button>
+                <button onclick="openResetModal('clear_all')" class="bg-red-500/80 text-white text-[9px] px-3 py-1.5 rounded-full font-bold shadow-sm hover:bg-red-600">محو البيانات بالكامل 🗑️</button>
+                <button onclick="exportToExcel()" class="bg-[#F5C416] text-[#2A3D71] text-[9px] px-3 py-1.5 rounded-full font-bold shadow-sm">تصدير 📊</button>
+                <input type="file" id="backupFile" class="hidden" accept=".json" onchange="importBackup(event)">
+            </div>
+        </div>
+        
+        <div class="text-center mt-6">
+            <div class="flex flex-wrap justify-center items-center gap-4 md:gap-6">
+                <!-- الرصيد السنوي المتاح -->
+                <div class="flex flex-col items-center bg-white/10 px-4 py-4 rounded-xl border border-white/5 w-52">
+                    <span class="text-blue-100/70 text-xs mb-2">الرصيد السنوي المتاح</span>
+                    <div class="flex items-center gap-3 text-white">
+                        <div class="flex flex-col items-center"><span id="headerAnnualDays" class="text-3xl font-bold">0</span><span class="text-[#F5C416] text-[10px]">يوم</span></div>
+                        <span class="text-white/30 text-xl font-light mb-2">|</span>
+                        <div class="flex flex-col items-center"><span id="headerAnnualHours" class="text-3xl font-bold">0</span><span class="text-[#F5C416] text-[10px]">ساعة</span></div>
+                    </div>
+                </div>
+                
+                <span class="text-[#F5C416] text-xl font-bold opacity-50">+</span>
+
+                <!-- الرصيد التعويضي المتاح -->
+                <div class="flex flex-col items-center bg-white/10 px-4 py-4 rounded-xl border border-white/5 w-52">
+                    <span class="text-blue-100/70 text-xs mb-2">الرصيد التعويضي المتاح</span>
+                    <div class="flex items-center gap-3 text-white">
+                        <div class="flex flex-col items-center"><span id="headerCompDays" class="text-3xl font-bold">0</span><span class="text-[#F5C416] text-[10px]">يوم</span></div>
+                        <span class="text-white/30 text-xl font-light mb-2">|</span>
+                        <div class="flex flex-col items-center"><span id="headerCompHours" class="text-3xl font-bold">0</span><span class="text-[#F5C416] text-[10px]">ساعة</span></div>
+                    </div>
+                </div>
+
+                <span class="text-[#F5C416] text-xl font-bold opacity-50">=</span>
+
+                <!-- الرصيد الإجمالي المتاح -->
+                <div class="flex flex-col items-center bg-[#F5C416]/10 px-6 py-4 rounded-xl border border-[#F5C416]/30 w-60 shadow-lg">
+                    <span class="text-[#F5C416] text-xs mb-2 font-bold">الرصيد الإجمالي المتاح</span>
+                    <div class="flex items-center gap-4 text-white">
+                        <div class="flex flex-col items-center"><span id="totalBalanceDays" class="text-4xl font-bold">0</span><span class="text-[#F5C416] text-[10px]">يوم</span></div>
+                        <span class="text-white/30 text-3xl font-light mb-2">|</span>
+                        <div class="flex flex-col items-center"><span id="remHoursOnly" class="text-4xl font-bold">0</span><span class="text-[#F5C416] text-[10px]">ساعة</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="flex bg-white shadow-sm sticky top-0 z-40 overflow-x-auto">
+        <button onclick="switchTab('main')" id="tabMainBtn" class="tab-btn active">🏠 الواجهة الرئيسية</button>
+        <button onclick="switchTab('employees')" id="tabEmployeesBtn" class="tab-btn">👥 بيانات الموظفين</button>
+        <button onclick="switchTab('extra')" id="tabExtraBtn" class="tab-btn">⏰ ساعات تعويضية</button>
+        <button onclick="switchTab('calculated')" id="tabCalculatedBtn" class="tab-btn">✅ الإجازات، الرصيد والمتمتع بها</button>
+        <button onclick="switchTab('stats')" id="tabStatsBtn" class="tab-btn">📊 احصائيات</button>
+        <button onclick="switchTab('guidelines')" id="tabGuidelinesBtn" class="tab-btn">📖 إرشادات</button>
+    </div>
+
+    <div class="px-4 py-4 space-y-4 pb-10 text-start">
+        
+        <!-- Tab 1: Dashboard -->
+        <div id="tabMainContent" class="space-y-4">
+            <div class="card p-5 border-t-4 border-[#2A3D71] text-center flex flex-wrap justify-center items-center gap-6">
+                <div class="flex flex-col items-center text-center">
+                    <span class="text-[12px] text-gray-500 font-bold mb-1">مدة الخدمة الفعلية</span>
+                    <span id="serviceDurationLabel" class="text-base font-bold text-[#2A3D71]">-</span>
+                </div>
+                <div class="h-8 w-px bg-slate-100 hidden sm:block"></div>
+                <div class="flex flex-col items-center text-center">
+                    <span class="text-[12px] text-gray-500 font-bold mb-1">الاستحقاق السنوي</span>
+                    <div class="flex flex-col items-center">
+                        <span id="annualRateDays" class="text-[22px] font-bold text-[#F5C416]">0</span>
+                        <span class="text-[10px] text-gray-400">يوم</span>
+                    </div>
+                </div>
+                <div class="h-8 w-px bg-slate-100 hidden sm:block"></div>
+                <div class="flex flex-col items-center text-center">
+                    <span class="text-[12px] text-gray-500 font-bold mb-1">الاستحقاق الشهري</span>
+                    <div class="flex gap-3">
+                        <div class="flex flex-col">
+                            <span id="monthlyRateHours" class="text-[22px] font-bold text-[#2A3D71]">0</span>
+                            <span class="text-[10px] text-gray-400">ساعة</span>
+                        </div>
+                        <div class="flex flex-col">
+                            <span id="monthlyRateMinutes" class="text-[22px] font-bold text-[#2A3D71]">0</span>
+                            <span class="text-[10px] text-gray-400">دقيقة</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card p-4 text-start border-r-4 border-[#F5C416]">
+                <div class="mb-4 flex items-center gap-2 bg-[#DBE5F3]/30 p-2 rounded-lg border border-[#DBE5F3] shadow-sm">
+                    <h2 class="text-[11px] font-bold text-[#2A3D71] uppercase tracking-tight">👤 بيانات الموظف المختار</h2>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-start">
+                    <div class="space-y-1">
+                        <label class="text-[9px] text-gray-400 block px-1">الرقم الوظيفي</label>
+                        <input type="text" id="employeeJobIdDisplay" readonly placeholder="-" class="text-[11px] py-1.5 px-2 border-[#DBE5F3] h-8">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[9px] text-gray-400 block px-1">اسم الموظف</label>
+                        <input type="text" id="employeeName" readonly placeholder="-" class="text-[11px] py-1.5 px-2 border-[#DBE5F3] font-bold h-8">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[9px] text-gray-400 block px-1">القسم</label>
+                        <input type="text" id="employeeDeptDisplay" readonly placeholder="-" class="text-[11px] py-1.5 px-2 border-[#DBE5F3] h-8">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[9px] text-gray-400 block px-1">تاريخ المباشرة</label>
+                        <input type="text" id="hireDateDisplay" readonly placeholder="-" class="text-[11px] py-1.5 px-2 border-[#DBE5F3] h-8">
+                        <input type="hidden" id="hireDate">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[9px] text-gray-400 block px-1">الشركة المتعاقدة</label>
+                        <input type="text" id="employeeCompanyDisplay" readonly placeholder="-" class="text-[11px] py-1.5 px-2 border-[#DBE5F3] h-8">
+                    </div>
+                </div>
+            </div>
+
+            <div class="card p-5 overflow-hidden text-start">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-sm font-bold text-gray-700">تفاصيل الرصيد والترحيل</h2>
+                    <button onclick="saveCalculatedBalance()" class="btn-accent text-[10px] px-3 py-1.5 rounded-lg font-bold text-start">تسجيل الرصيد المحتسب 📌</button>
+                </div>
+                <div class="overflow-auto max-h-[400px] border border-slate-100 rounded-lg">
+                    <table class="w-full text-[10px]">
+                        <thead class="bg-[#2A3D71] text-white font-bold sticky top-0 z-10 text-start">
+                            <tr>
+                                <th class="py-3 px-2 text-start">السنة</th>
+                                <th class="py-3 px-2 text-start">المكتسب (ساعة)</th>
+                                <th class="py-3 px-2 text-center">المرحّل (يوم)</th>
+                                <th class="py-3 px-2 text-center">المستهلك (ساعة)</th>
+                                <th class="py-3 px-2 text-center">غير مرحل</th>
+                                <th class="py-3 px-2 text-center font-bold text-[#F5C416]">المتاح (ساعة)</th>
+                                <th class="py-3 px-2 text-center font-bold text-[#F5C416]">المتاح (يوم)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="yearlyTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Employees -->
+        <div id="tabEmployeesContent" class="hidden space-y-4 text-start">
+            <div class="card p-4 text-start border-r-4 border-indigo-600">
+                <div class="mb-4 flex items-center gap-2 bg-blue-50 p-2 rounded-lg border border-blue-100 shadow-sm">
+                    <h2 class="text-[11px] font-bold text-blue-800 uppercase tracking-tight">➕ إضافة موظف جديد للسجل</h2>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-start">
+                    <div class="space-y-1">
+                        <label class="text-[9px] text-gray-400 block px-1">الرقم الوظيفي</label>
+                        <input type="text" id="newEmpJobId" placeholder="الرقم الوظيفي" class="text-[11px] py-1.5 px-2 border-[#DBE5F3] h-8">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[9px] text-gray-400 block px-1">اسم الموظف</label>
+                        <input type="text" id="newEmpName" placeholder="اسم الموظف" class="text-[11px] py-1.5 px-2 border-[#DBE5F3] font-bold h-8">
+                    </div>
+                    <div class="space-y-1 relative group">
+                        <label class="text-[9px] text-gray-400 block px-1">القسم</label>
+                        <input type="text" id="newEmpDept" autocomplete="off" placeholder="القسم" class="text-[11px] py-1.5 px-2 border-[#DBE5F3] h-8" onfocus="showCustomDropdown('newEmpDept', 'customDeptList')" oninput="filterCustomDropdown('newEmpDept', 'customDeptList')">
+                        <div id="customDeptList" class="custom-dropdown-list shadow-2xl"></div>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[9px] text-gray-400 block px-1">تاريخ المباشرة</label>
+                        <input type="text" id="newEmpDate" placeholder="تاريخ المباشرة" onfocus="(this.type='date')" onblur="(this.type='text')" class="text-[11px] py-1.5 px-2 border-[#DBE5F3] h-8">
+                    </div>
+                    <div class="space-y-1 relative group">
+                        <label class="text-[9px] text-gray-400 block px-1">الشركة المتعاقدة</label>
+                        <input type="text" id="newEmpCompany" autocomplete="off" placeholder="الشركة المتعاقدة" class="text-[11px] py-1.5 px-2 border-[#DBE5F3] h-8" onfocus="showCustomDropdown('newEmpCompany', 'customCompanyList')" oninput="filterCustomDropdown('newEmpCompany', 'customCompanyList')">
+                        <div id="customCompanyList" class="custom-dropdown-list shadow-2xl"></div>
+                    </div>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-3 justify-center items-center mt-6">
+                    <button onclick="addEmployeeManual()" class="min-w-[180px] bg-[#2A3D71] text-white py-2.5 px-6 rounded-xl font-bold shadow-md hover:opacity-90 transition-all active:scale-95 text-xs">حفظ بيانات الموظف</button>
+                    <label class="min-w-[180px] border border-[#DBE5F3] bg-white text-slate-700 py-2.5 px-6 rounded-xl font-bold shadow-sm hover:bg-slate-50 transition-all active:scale-95 text-center cursor-pointer text-xs">📂 رفع ملف Excel <input type="file" id="excelFile" class="hidden" accept=".xlsx, .xls" onchange="handleExcelUpload(event)"></label>
+                </div>
+            </div>
+
+            <div class="card p-5 text-start">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-sm font-bold text-gray-700">👥 سجل الموظفين</h2>
+                    <div class="flex gap-2">
+                        <button onclick="clearAllEmployeeFilters()" class="bg-slate-100 text-slate-600 text-[10px] px-4 py-2 rounded-xl font-bold border border-slate-200 hover:bg-slate-200 transition-all active:scale-95">الغاء كافة خيارات التصفية 🧹</button>
+                        <button onclick="checkBulkRegister()" class="bg-[#F5C416] text-[#2A3D71] text-[10px] px-4 py-2 rounded-xl font-bold shadow-md active:scale-95">تسجيل الرصيد المحتسب للكل 📌</button>
+                    </div>
+                </div>
+                <div class="flex gap-2 text-[10px] mb-4">
+                    <span id="empCountBadgeTotal" class="bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold"></span>
+                    <span id="empCountBadgeFiltered" class="bg-[#DBE5F3] px-2 py-0.5 rounded text-[#2A3D71] font-bold"></span>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-lg mb-4 grid grid-cols-1 sm:grid-cols-4 gap-2">
+                    <div class="relative">
+                        <input type="text" id="filterName" placeholder="بحث باسم الموظف..." class="text-xs border-[#DBE5F3]" oninput="resetPageAndRender()">
+                        <span class="input-clear-btn" onclick="clearField('filterName')">✕</span>
+                    </div>
+                    <div class="relative">
+                        <select id="filterDept" class="text-xs border-[#DBE5F3]" onchange="resetPageAndRender()"><option value="">كل الأقسام</option></select>
+                        <span class="input-clear-btn" onclick="clearField('filterDept')" style="left: 25px;">✕</span>
+                    </div>
+                    <div class="relative">
+                        <input type="text" id="filterDate" placeholder="تاريخ المباشرة..." class="text-xs border-[#DBE5F3]" oninput="resetPageAndRender()">
+                        <span class="input-clear-btn" onclick="clearField('filterDate')">✕</span>
+                    </div>
+                    <div class="flex gap-1">
+                        <select id="itemsPerPageSelect" class="text-xs border-[#DBE5F3] flex-1" onchange="changeItemsPerPage()">
+                            <option value="50">عرض 50 سجل</option>
+                            <option value="100" selected>عرض 100 سجل</option>
+                            <option value="250">عرض 250 سجل</option>
+                            <option value="500">عرض 500 سجل</option>
+                            <option value="custom">رقم مخصص...</option>
+                        </select>
+                        <input type="number" id="customItemsPerPage" class="text-xs border-[#DBE5F3] hidden w-16 text-center" placeholder="العدد" oninput="applyCustomItemsPerPage()">
+                    </div>
+                </div>
+                <div class="overflow-auto max-h-[400px] border border-slate-100 rounded-lg">
+                    <table class="w-full text-[10px]">
+                        <thead class="bg-[#2A3D71] text-white sticky top-0 z-10 text-start">
+                            <tr>
+                                <th class="py-3 px-2 text-start">#</th>
+                                <th class="py-3 px-2 text-start">الرقم الوظيفي</th>
+                                <th class="py-3 px-2 text-start">اسم الموظف</th>
+                                <th class="py-3 px-2 text-start">القسم</th>
+                                <th class="py-3 px-2 text-start">تاريخ المباشرة</th>
+                                <th class="py-3 px-2 text-start">الشركة المتعاقدة</th>
+                                <th class="py-3 px-2 text-start">الإجراء</th>
+                            </tr>
+                        </thead>
+                        <tbody id="employeesListBody"></tbody>
+                    </table>
+                </div>
+                <div id="paginationControls" class="flex justify-center items-center gap-2 mt-4 text-xs" dir="ltr"></div>
+            </div>
+        </div>
+
+        <!-- Tab 3: Extra Hours -->
+        <div id="tabExtraContent" class="hidden space-y-4 text-start">
+            
+            <!-- شريط التبويبات الفرعية المعدل -->
+            <div class="flex bg-white shadow-sm overflow-x-auto mb-4 border-b border-slate-200">
+                <button onclick="switchExtraSubTab('entry')" id="extraTabEntryBtn" class="sub-tab-btn active">➕ إدراج الساعات الإضافية</button>
+                <button onclick="switchExtraSubTab('list')" id="extraTabListBtn" class="sub-tab-btn">📋 سجل الساعات الإضافية</button>
+            </div>
+
+            <!-- التبويب الفرعي الأول: نموذج الإدخال -->
+            <div id="extraSectionEntry" class="card p-5 border-r-4 border-indigo-600">
+                <div class="mb-4 flex items-center gap-2 bg-indigo-50 p-3 rounded-lg border border-indigo-100 shadow-sm">
+                    <h2 class="text-[11px] font-bold text-indigo-800 uppercase tracking-tight">إضافة قيد ساعات إضافية جديد</h2>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl">
+                    <div class="space-y-1">
+                        <label class="text-[10px] text-gray-500 font-bold px-1">الرقم الوظيفي</label>
+                        <input type="text" id="extraHoursJobId" placeholder="الرقم الوظيفي" class="h-10 text-xs">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] text-gray-500 font-bold px-1">تاريخ الساعات الإضافية</label>
+                        <input type="date" id="extraHoursDate" class="h-10 text-xs">
+                    </div>
+                    <div class="space-y-1 flex gap-2 items-end">
+                        <div class="flex-1">
+                            <label class="text-[10px] text-gray-500 font-bold px-1">عدد الساعات</label>
+                            <input type="number" id="extraHoursValue" placeholder="عدد الساعات" class="h-10 text-xs">
+                        </div>
+                        <button onclick="addExtraHoursEntry()" class="bg-indigo-600 text-white h-10 px-6 rounded-xl font-bold text-xs shadow-md hover:bg-indigo-700 transition-all active:scale-95 whitespace-nowrap">إضافة القيد</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- التبويب الفرعي الثاني: سجل القيود والتصفية -->
+            <div id="extraSectionList" class="card p-5 hidden">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
+                    <h2 class="text-sm font-bold text-gray-700">📋 سجل القيود للساعات التعويضية</h2>
+                    <div class="bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-100 flex items-center gap-2">
+                        <span class="text-[10px] text-indigo-800 font-bold">مجموع الساعات التعويضية بحسب التصفية:</span>
+                        <span id="extraFilteredTotal" class="font-bold text-indigo-700 text-lg">0</span>
+                        <span class="text-[10px] text-indigo-600">ساعة</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 p-3 rounded-lg mb-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div class="relative">
+                        <input type="text" id="extraFilterName" placeholder="بحث بالاسم أو الرقم الوظيفي..." class="text-xs border-[#DBE5F3]" oninput="renderExtraHoursTable()">
+                        <span class="input-clear-btn" onclick="document.getElementById('extraFilterName').value=''; renderExtraHoursTable();">✕</span>
+                    </div>
+                    <div class="relative flex items-center gap-2">
+                        <label class="text-[10px] text-gray-500 font-bold whitespace-nowrap">من:</label>
+                        <input type="date" id="extraFilterDateFrom" title="من تاريخ" class="text-xs border-[#DBE5F3] w-full" oninput="renderExtraHoursTable()">
+                        <span class="input-clear-btn" onclick="document.getElementById('extraFilterDateFrom').value=''; renderExtraHoursTable();" style="left: 25px;">✕</span>
+                    </div>
+                    <div class="relative flex items-center gap-2">
+                        <label class="text-[10px] text-gray-500 font-bold whitespace-nowrap">إلى:</label>
+                        <input type="date" id="extraFilterDateTo" title="إلى تاريخ" class="text-xs border-[#DBE5F3] w-full" oninput="renderExtraHoursTable()">
+                        <span class="input-clear-btn" onclick="document.getElementById('extraFilterDateTo').value=''; renderExtraHoursTable();" style="left: 25px;">✕</span>
+                    </div>
+                    <div class="flex justify-end items-center">
+                        <button onclick="clearExtraFilters()" class="bg-slate-100 text-slate-600 text-[10px] px-4 py-2 rounded-xl font-bold border border-slate-200 hover:bg-slate-200 transition-all active:scale-95 w-full h-full">الغاء كافة خيارات التصفية 🧹</button>
+                    </div>
+                </div>
+
+                <div class="overflow-auto border border-slate-100 rounded-lg max-h-[400px]">
+                    <table class="w-full text-[10px] min-w-[900px]">
+                        <thead class="bg-[#2A3D71] text-white sticky top-0 z-10 text-start">
+                            <tr>
+                                <th class="py-3 px-2 text-start w-12">#</th>
+                                <th class="py-3 px-2 text-start">الرقم الوظيفي</th>
+                                <th class="py-3 px-2 text-start">اسم الموظف</th>
+                                <th class="py-3 px-2 text-start">القسم</th>
+                                <th class="py-3 px-2 text-start">تاريخ المباشرة</th>
+                                <th class="py-3 px-2 text-start">الشركة المتعاقدة</th>
+                                <th class="py-3 px-2 text-center text-[#F5C416]">تاريخ الساعات الإضافية</th>
+                                <th class="py-3 px-2 text-center text-[#F5C416] font-bold">الساعات</th>
+                                <th class="py-3 px-2 text-center w-16">حذف</th>
+                            </tr>
+                        </thead>
+                        <tbody id="extraHoursTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Tab 4: Calculated Records & Taken Leaves -->
+        <div id="tabCalculatedContent" class="hidden space-y-4 text-start">
+            
+            <!-- شريط التبويبات الفرعية لقسم الإجازات -->
+            <div class="flex bg-white shadow-sm overflow-x-auto mb-4 border-b border-slate-200">
+                <button onclick="switchCalcSubTab('list')" id="calcTabListBtn" class="sub-tab-btn active">📋 سجل الأرصدة المحتسبة</button>
+                <button onclick="switchCalcSubTab('leaves')" id="calcTabLeavesBtn" class="sub-tab-btn">✈️ الإجازات المتمتع بها</button>
+            </div>
+
+            <!-- التبويب الفرعي الأول: سجل الأرصدة المحتسبة -->
+            <div id="calcSectionList" class="card p-5 text-start">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-sm font-bold text-gray-700">✅ رصيد الموظفين المحتسب والمؤرشف</h2>
+                    <div class="flex gap-2">
+                        <button onclick="clearAllCalcFilters()" class="bg-slate-100 text-slate-600 text-[9px] px-3 py-1.5 rounded-lg font-bold border border-slate-200 hover:bg-slate-200 transition-all active:scale-95">الغاء كافة خيارات التصفية 🧹</button>
+                        <button onclick="openResetModal('clear_calculated')" class="bg-red-50 text-red-600 text-[9px] px-3 py-1.5 rounded-lg font-bold border border-red-100">حذف الكل 🗑️</button>
+                        <button onclick="exportCalculatedToExcel()" class="bg-[#F5C416] text-[#2A3D71] text-[9px] px-3 py-1.5 rounded-lg font-bold shadow-sm">تصدير ملف اكسل 📊</button>
+                    </div>
+                </div>
+
+                <div class="flex gap-2 text-[10px] mb-4">
+                    <span id="calcCountBadgeTotal" class="bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold"></span>
+                    <span id="calcCountBadgeFiltered" class="bg-[#DBE5F3] px-2 py-0.5 rounded text-[#2A3D71] font-bold"></span>
+                </div>
+                
+                <div class="bg-slate-50 p-4 rounded-xl mb-4 grid grid-cols-1 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+                    <div class="relative">
+                        <input type="text" id="archiveFilterID" placeholder="الرقم الوظيفي..." class="text-xs border-[#DBE5F3]" oninput="resetCalcPageAndRender()">
+                        <span class="input-clear-btn" onclick="clearField('archiveFilterID', true)">✕</span>
+                    </div>
+                    <div class="relative">
+                        <input type="text" id="archiveFilterName" placeholder="اسم الموظف..." class="text-xs border-[#DBE5F3]" oninput="resetCalcPageAndRender()">
+                        <span class="input-clear-btn" onclick="clearField('archiveFilterID', true)">✕</span>
+                    </div>
+                    <div class="relative">
+                        <select id="archiveFilterDept" class="text-xs border-[#DBE5F3]" onchange="resetCalcPageAndRender()"><option value="">كل الأقسام</option></select>
+                        <span class="input-clear-btn" onclick="clearField('archiveFilterDept', true)" style="left: 25px;">✕</span>
+                    </div>
+                    <div class="relative">
+                        <select id="archiveFilterCompany" class="text-xs border-[#DBE5F3]" onchange="resetCalcPageAndRender()"><option value="">كل الشركات</option></select>
+                        <span class="input-clear-btn" onclick="clearField('archiveFilterCompany', true)" style="left: 25px;">✕</span>
+                    </div>
+                    <div class="flex gap-1">
+                        <select id="calcItemsPerPageSelect" class="text-xs border-[#DBE5F3] flex-1" onchange="changeCalcItemsPerPage()">
+                            <option value="50">عرض 50 سجل</option>
+                            <option value="100" selected>عرض 100 سجل</option>
+                            <option value="250">عرض 250 سجل</option>
+                            <option value="500">عرض 500 سجل</option>
+                            <option value="custom">رقم مخصص...</option>
+                        </select>
+                        <input type="number" id="calcCustomItemsPerPage" class="text-xs border-[#DBE5F3] hidden w-16 text-center" placeholder="العدد" oninput="applyCalcCustomItemsPerPage()">
+                    </div>
+                </div>
+                <div class="overflow-auto border border-slate-100 rounded-lg">
+                    <table class="w-full text-[10px]">
+                        <thead class="bg-[#2A3D71] text-white text-start">
+                            <tr>
+                                <th class="py-3 px-2 text-start">#</th>
+                                <th class="py-3 px-2 text-start">الرقم الوظيفي</th>
+                                <th class="py-3 px-2 text-start">اسم الموظف</th>
+                                <th class="py-3 px-2 text-start">القسم</th>
+                                <th class="py-3 px-2 text-start">تاريخ المباشرة</th>
+                                <th class="py-3 px-2 text-start">الشركة المتعاقدة</th>
+                                <th class="py-3 px-2 text-start text-[#F5C416]">تاريخ الاحتساب</th>
+                                <th class="py-3 px-2 text-start font-bold">الرصيد السنوي (ساعة)</th>
+                                <th class="py-3 px-2 text-start font-bold">الرصيد السنوي (يوم)</th>
+                                <th class="py-3 px-2 text-start font-bold text-white">الرصيد التعويضي (ساعة)</th>
+                                <th class="py-3 px-2 text-start font-bold text-white">المتمتع به</th>
+                                <th class="py-3 px-2 text-start font-bold text-[#F5C416]">الرصيد الإجمالي (يوم)</th>
+                                <th class="py-3 px-2 text-start">حذف</th>
+                            </tr>
+                        </thead>
+                        <tbody id="calculatedListBody"></tbody>
+                    </table>
+                </div>
+                <div id="calcPaginationControls" class="flex justify-center items-center gap-2 mt-4 text-xs" dir="ltr"></div>
+            </div>
+
+            <!-- التبويب الفرعي الثاني: الإجازات المتمتع بها -->
+            <div id="calcSectionLeaves" class="hidden space-y-4">
+                <div class="card p-5 border-r-4 border-emerald-600">
+                    <div class="mb-4 flex items-center gap-2 bg-emerald-50 p-3 rounded-lg border border-emerald-100 shadow-sm">
+                        <h2 class="text-[11px] font-bold text-emerald-800 uppercase tracking-tight">إضافة سجل إجازة متمتع بها</h2>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl items-end">
+                        <div class="space-y-1">
+                            <label class="text-[10px] text-gray-500 font-bold px-1">الرقم الوظيفي</label>
+                            <input type="text" id="leaveTakenJobId" placeholder="الرقم الوظيفي" class="h-10 text-xs border-[#DBE5F3]">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] text-gray-500 font-bold px-1">تاريخ الطلب</label>
+                            <input type="date" id="leaveTakenReqDate" class="h-10 text-xs border-[#DBE5F3]">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] text-gray-500 font-bold px-1">وقت الطلب</label>
+                            <input type="time" id="leaveTakenReqTime" class="h-10 text-xs border-[#DBE5F3] font-mono cursor-pointer">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] text-gray-500 font-bold px-1">تاريخ بدء الإجازة</label>
+                            <input type="date" id="leaveTakenStartDate" class="h-10 text-xs border-[#DBE5F3]">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] text-gray-500 font-bold px-1">وقت بدء الإجازة <span class="text-gray-400 font-normal">(اختياري)</span></label>
+                            <input type="time" id="leaveTakenStartTime" class="h-10 text-xs border-[#DBE5F3] font-mono cursor-pointer">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] text-gray-500 font-bold px-1">سبب الإجازة</label>
+                            <input type="text" id="leaveTakenReason" placeholder="السبب" class="h-10 text-xs border-[#DBE5F3]">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] text-gray-500 font-bold px-1">تاريخ المباشرة</label>
+                            <input type="date" id="leaveTakenReturnDate" class="h-10 text-xs border-[#DBE5F3]">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] text-gray-500 font-bold px-1">المجموع الكلي</label>
+                            <input type="number" id="leaveTakenTotal" placeholder="المجموع" class="h-10 text-xs border-[#DBE5F3]">
+                        </div>
+                        <div class="md:col-span-3 lg:col-span-4 flex justify-end mt-2">
+                            <button onclick="addTakenLeaveEntry()" class="bg-emerald-600 text-white h-10 px-8 rounded-xl font-bold text-xs shadow-md hover:bg-emerald-700 transition-all active:scale-95">إضافة السجل</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card p-5">
+                    <h2 class="text-sm font-bold text-gray-700 mb-4">📋 سجل الإجازات المتمتع بها</h2>
+                    <div class="overflow-auto border border-slate-100 rounded-lg max-h-[400px]">
+                        <table class="w-full text-[10px] min-w-[1000px]">
+                            <thead class="bg-[#2A3D71] text-white sticky top-0 z-10 text-start">
+                                <tr>
+                                    <th class="py-3 px-2 text-start w-12">#</th>
+                                    <th class="py-3 px-2 text-start">الرقم الوظيفي</th>
+                                    <th class="py-3 px-2 text-start">اسم الموظف</th>
+                                    <th class="py-3 px-2 text-start">القسم</th>
+                                    <th class="py-3 px-2 text-start">الشركة المتعاقدة</th>
+                                    <th class="py-3 px-2 text-center text-[#F5C416]">تاريخ الطلب</th>
+                                    <th class="py-3 px-2 text-center text-[#F5C416]">وقت الطلب</th>
+                                    <th class="py-3 px-2 text-center font-bold">تاريخ البدء</th>
+                                    <th class="py-3 px-2 text-center text-[#F5C416]">وقت البدء</th>
+                                    <th class="py-3 px-2 text-center font-bold">تاريخ المباشرة</th>
+                                    <th class="py-3 px-2 text-center">السبب</th>
+                                    <th class="py-3 px-2 text-center font-bold text-emerald-300">المجموع الكلي</th>
+                                    <th class="py-3 px-2 text-center w-16">حذف</th>
+                                </tr>
+                            </thead>
+                            <tbody id="takenLeavesTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Tab 5: Stats -->
+        <div id="tabStatsContent" class="hidden space-y-4 text-start">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="card p-5 text-start"><h3 class="text-sm font-bold mb-4 text-[#2A3D71]">إحصائية بحسب القسم</h3><div id="statsDeptsBody" class="space-y-2"></div></div>
+                <div class="card p-5 text-start"><h3 class="text-sm font-bold mb-4 text-[#2A3D71]">إحصائية بحسب الشركة</h3><div id="statsCompaniesBody" class="space-y-2"></div></div>
+            </div>
+        </div>
+
+        <!-- Tab 6: Guidelines -->
+        <div id="tabGuidelinesContent" class="hidden text-start">
+            <div class="card p-6 space-y-6">
+                <h2 class="text-xl font-bold text-[#2A3D71] border-b border-[#F5C416] pb-4 mb-4">📖 دليل القواعد والتعليمات - نظام احتساب الإجازات</h2>
+                <div class="guide-section">
+                    <h3 class="guide-h3">⚖️ أولاً: قواعد استحقاق الإجازات السنوية</h3>
+                    <div class="text-xs text-gray-700 leading-relaxed space-y-2">
+                        <p>يتم احتساب الرصيد السنوي بناءً على مدة الخدمة الفعلية للموظف وفقاً للمدد التالية:</p>
+                        <ul class="list-disc list-inside mr-4 space-y-1">
+                            <li><b>من صفر إلى 4 سنوات خدمة:</b> يستحق الموظف <b>21 يوماً</b> سنوياً (بمعدل <b>14 ساعة</b> شهرياً).</li>
+                            <li><b>من 5 إلى 9 سنوات خدمة:</b> يستحق الموظف <b>23 يوماً</b> سنوياً (بمعدل <b>15 ساعة و 20 دقيقة</b> شهرياً).</li>
+                            <li><b>من 10 إلى 14 سنة خدمة:</b> يستحق الموظف <b>25 يوماً</b> سنوياً (بمعدل <b>16 ساعة و 40 دقيقة</b> شهرياً).</li>
+                            <li><b>بعد خدمة 15 سنة:</b> يزداد الرصيد بمقدار <b>3 أيام إضافية كل 5 سنوات</b> أقدمية.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    </div><!-- /appContainer -->
+
+    <script>
+        // --- Supabase Config ---
+        const SUPABASE_URL = 'https://corzaichdzeiwbofhjfr.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvcnphaWNoZHplaXdib2ZoamZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4NzQ2NTIsImV4cCI6MjA5MDQ1MDY1Mn0.m4ArD49nqliRu5saWiM5OuCJTRn6bB_beaWCdbvHdwQ';
+        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // --- State and Constants ---
+        const HOURS_PER_DAY = 8;
+        let manualUsageOverrides = {};
+        let employees = [];
+        let extraHoursEntries = [];
+        let calculatedBalances = [];
+        let takenLeavesEntries = [];
+        let currentCalculatedHoursAnnual = 0, currentCalculatedHoursComp = 0;
+        let currentPage = 1, itemsPerPage = 100, pendingDeleteIdx = -1, pendingDeleteType = '';
+        let calcCurrentPage = 1, calcItemsPerPage = 100;
+        let uniqueDepts = [], uniqueCompanies = [];
+        let currentUser = null;
+
+        // --- Auth Functions ---
+        async function handleAuth(mode) {
+            const email = document.getElementById('authEmail').value.trim();
+            const password = document.getElementById('authPassword').value;
+            const errorEl = document.getElementById('authError');
+            errorEl.innerText = '';
+            if (!email || !password) { errorEl.innerText = 'يرجى إدخال البريد وكلمة المرور'; return; }
+            let result;
+            if (mode === 'signup') { result = await sb.auth.signUp({ email, password }); }
+            else { result = await sb.auth.signInWithPassword({ email, password }); }
+            if (result.error) { errorEl.innerText = result.error.message; return; }
+            currentUser = result.data.user;
+            document.getElementById('authOverlay').classList.add('auth-hidden');
+            document.getElementById('appContainer').classList.remove('auth-hidden');
+            document.getElementById('userEmailDisplay').innerText = currentUser.email;
+            await loadAllData();
+        }
+
+        async function handleSignOut() {
+            await sb.auth.signOut();
+            currentUser = null;
+            employees = []; extraHoursEntries = []; calculatedBalances = []; takenLeavesEntries = []; manualUsageOverrides = {};
+            document.getElementById('authOverlay').classList.remove('auth-hidden');
+            document.getElementById('appContainer').classList.add('auth-hidden');
+        }
+
+        function showLoading() { document.getElementById('loadingOverlay')?.classList.remove('auth-hidden'); }
+        function hideLoading() { document.getElementById('loadingOverlay')?.classList.add('auth-hidden'); }
+
+        // --- Load All Data from Supabase ---
+        async function loadAllData() {
+            showLoading();
+            try {
+                const [empRes, extraRes, calcRes, takenRes, usageRes] = await Promise.all([
+                    sb.from('employees').select('*').order('created_at', { ascending: false }),
+                    sb.from('extra_hours').select('*').order('created_at', { ascending: false }),
+                    sb.from('calculated_balances').select('*').order('created_at', { ascending: false }),
+                    sb.from('taken_leaves').select('*').order('created_at', { ascending: false }),
+                    sb.from('usage_overrides').select('*')
+                ]);
+                employees = (empRes.data || []).map(e => ({ ...e, jobId: e.job_id, hireDate: e.hire_date }));
+                extraHoursEntries = (extraRes.data || []).map(e => ({ ...e, jobId: e.job_id }));
+                calculatedBalances = (calcRes.data || []).map(e => ({ ...e, jobId: e.job_id, calcDate: e.calc_date, annualHours: Number(e.annual_hours), compHours: Number(e.comp_hours), totalDays: Number(e.total_days) }));
+                takenLeavesEntries = (takenRes.data || []).map(e => ({ ...e, jobId: e.job_id, reqDate: e.req_date, reqTime: e.req_time, startDate: e.start_date, startTime: e.start_time, returnDate: e.return_date, total: Number(e.total) }));
+                manualUsageOverrides = {};
+                (usageRes.data || []).forEach(o => { if (!manualUsageOverrides[o.job_id]) manualUsageOverrides[o.job_id] = {}; manualUsageOverrides[o.job_id][o.year] = Number(o.hours); });
+                calculateEverything(); renderEmployees(); renderStatistics(); renderExtraHoursTable(); renderTakenLeavesTable();
+            } catch (err) { console.error('Load error:', err); }
+            hideLoading();
+        }
+
+        // --- Utility Functions ---
+        function normalizeArabicText(text) { 
+            if (!text) return "";
+            return text.toString().replace(/[\u064B-\u065F\u0670]/g, "").replace(/[أإآا]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي"); 
+        }
+
+        function clearField(id, isCalc = false) {
+            const el = document.getElementById(id);
+            if(el) { 
+                el.value = ''; 
+                if(isCalc) resetCalcPageAndRender(); 
+                else resetPageAndRender(); 
+            }
+        }
+
+        function clearAllEmployeeFilters() {
+            document.getElementById('filterName').value = '';
+            document.getElementById('filterDept').value = '';
+            document.getElementById('filterDate').value = '';
+            resetPageAndRender();
+        }
+
+        function clearAllCalcFilters() {
+            document.getElementById('archiveFilterID').value = '';
+            document.getElementById('archiveFilterName').value = '';
+            document.getElementById('archiveFilterDept').value = '';
+            document.getElementById('archiveFilterCompany').value = '';
+            resetCalcPageAndRender();
+        }
+
+        function clearExtraFilters() {
+            document.getElementById('extraFilterName').value = '';
+            document.getElementById('extraFilterDateFrom').value = '';
+            document.getElementById('extraFilterDateTo').value = '';
+            renderExtraHoursTable();
+        }
+
+        function showNotification(msgKey, type = 'info', val = '') {
+            const modal = document.getElementById('notificationModal'), card = document.getElementById('notificationCard'), icon = document.getElementById('notificationIcon'), title = document.getElementById('notificationTitle'), text = document.getElementById('notificationText');
+            if (!modal || !card) return;
+            const msgs = {
+                alert_choose_emp: "يرجى اختيار موظف أولاً للمتابعة.",
+                alert_pinned: "تم تسجيل وحفظ الرصيد بنجاح.",
+                alert_duplicate: "الرقم الوظيفي (VAL) مسجل مسبقاً في الأرصدة!",
+                alert_duplicate_emp: "تنبيه: الرقم الوظيفي (VAL) مستخدم بالفعل.",
+                alert_excel_success: "اكتمل استيراد البيانات بنجاح.",
+                alert_restored: "تمت استعادة كافة البيانات.",
+                alert_bulk_success: "تم تسجيل أرصدة (VAL) موظف بنجاح.",
+                alert_bulk_none: "لم يتم العثور على موظفين جدد للتسجيل.",
+                alert_future_date: "لا يمكن تسجيل ساعات تعويضية لتاريخ مستقبلي! المسموح فقط تاريخ اليوم وما قبله.",
+                alert_missing_fields: "يرجى تعبئة كافة الحقول (الرقم، التاريخ، الساعات)."
+            };
+            text.innerText = (msgs[msgKey] || msgKey).replace('(VAL)', val);
+            if (type === 'error') { card.className = "relative card w-full max-w-xs p-6 shadow-2xl border-t-8 border-rose-500 bg-white text-center"; icon.innerText = "⚠️"; icon.className = "w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl bg-rose-50 text-rose-500"; title.innerText = "خطأ"; }
+            else if (type === 'success') { card.className = "relative card w-full max-w-xs p-6 shadow-2xl border-t-8 border-emerald-500 bg-white text-center"; icon.innerText = "✅"; icon.className = "w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl bg-emerald-50 text-emerald-500"; title.innerText = "نجاح العملية"; }
+            else { card.className = "relative card w-full max-w-xs p-6 shadow-2xl border-t-8 border-[#2A3D71] bg-white text-center"; icon.innerText = "ℹ️"; icon.className = "w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl bg-[#DBE5F3] text-[#2A3D71]"; title.innerText = "تنبيه"; }
+            modal.classList.remove('hidden');
+        }
+
+        function closeNotification() { document.getElementById('notificationModal').classList.add('hidden'); }
+
+        function getAnnualRate(hd, cd) { 
+            let y = cd.getFullYear() - hd.getFullYear(); 
+            if (cd.getMonth() < hd.getMonth() || (cd.getMonth() === hd.getMonth() && cd.getDate() < hd.getDate())) y--; 
+            if (y >= 15) return 25 + (Math.floor((y - 15) / 5) + 1) * 3; 
+            return y >= 10 ? 25 : (y >= 5 ? 23 : 21); 
+        }
+
+        function formatDuration(y, m) {
+            let yp = y === 1 ? "سنة" : (y === 2 ? "سنتان" : (y >= 3 && y <= 10 ? `${y} سنوات` : `${y} سنة`)), mp = m === 1 ? "شهر" : (m === 2 ? "شهران" : (m >= 3 && m <= 10 ? `${m} أشهر` : `${m} شهر`));
+            return (y > 0 && m > 0) ? `${yp} و ${mp}` : (y > 0 ? yp : (mp || "أقل من شهر"));
+        }
+
+        function getSplitBalance(emp) {
+            if (!emp || !emp.hireDate || !emp.jobId) return { annual: 0, comp: 0 };
+            const hd = new Date(emp.hireDate), td_now = new Date();
+            let calcStart = new Date(hd); 
+            if (hd.getDate() <= 15) { calcStart.setDate(1); } else { calcStart.setMonth(calcStart.getMonth() + 1); calcStart.setDate(1); }
+            
+            let poolComp = extraHoursEntries
+                .filter(e => e.jobId.toString().toLowerCase() === emp.jobId.toString().toLowerCase())
+                .reduce((sum, entry) => sum + entry.hours, 0);
+
+            const totalTaken = takenLeavesEntries
+                .filter(tl => tl.jobId.toString().toLowerCase() === emp.jobId.toString().toLowerCase())
+                .reduce((sum, entry) => sum + entry.total, 0);
+
+            const eu = manualUsageOverrides[emp.jobId] || {};
+            let carry = 0, finalAnnual = 0;
+            
+            for (let y = calcStart.getFullYear(); y <= td_now.getFullYear(); y++) {
+                let earned = 0;
+                let sM = (y === calcStart.getFullYear()) ? calcStart.getMonth() : 0, eM = (y === td_now.getFullYear()) ? td_now.getMonth() : 12;
+                for (let m = sM; m < eM; m++) earned += (getAnnualRate(hd, new Date(y, m, 15)) * 8) / 12;
+                
+                const totalUsed = eu[y] || 0;
+                let usedFromComp = Math.min(totalUsed, poolComp); poolComp -= usedFromComp;
+                let usedFromAnnual = totalUsed - usedFromComp;
+                let uFC = Math.min(usedFromAnnual, Math.max(0, carry)), remU = (carry < 0) ? (usedFromAnnual + Math.abs(carry)) : (usedFromAnnual - uFC), drop = Math.max(0, carry - uFC), bal = earned - remU;
+                if (y === td_now.getFullYear()) finalAnnual = bal + drop;
+                carry = bal;
+            }
+
+            let remTaken = totalTaken;
+            let fromComp = Math.min(poolComp, remTaken);
+            poolComp -= fromComp;
+            remTaken -= fromComp;
+            finalAnnual -= remTaken;
+
+            return { annual: finalAnnual, comp: poolComp };
+        }
+
+        // --- Core Functions ---
+        function calculateEverything() {
+            const hi = document.getElementById('hireDate')?.value;
+            const jobId = document.getElementById('employeeJobIdDisplay')?.value;
+            
+            const elYearlyTableBody = document.getElementById('yearlyTableBody');
+            const elTotalBalanceDays = document.getElementById('totalBalanceDays');
+            const elRemHoursOnly = document.getElementById('remHoursOnly');
+            const elHeaderAnnualDays = document.getElementById('headerAnnualDays');
+            const elHeaderAnnualHours = document.getElementById('headerAnnualHours');
+            const elHeaderCompDays = document.getElementById('headerCompDays');
+            const elHeaderCompHours = document.getElementById('headerCompHours');
+            const elCompensatoryBalanceDisplay = document.getElementById('compensatoryBalanceDisplay');
+            const elServiceDurationLabel = document.getElementById('serviceDurationLabel');
+            const elAnnualRateDays = document.getElementById('annualRateDays');
+            const elMonthlyRateHours = document.getElementById('monthlyRateHours');
+            const elMonthlyRateMinutes = document.getElementById('monthlyRateMinutes');
+
+            if (!hi || !jobId || jobId === "" || jobId === "-") {
+                if (elYearlyTableBody) elYearlyTableBody.innerHTML = ""; 
+                if (elTotalBalanceDays) elTotalBalanceDays.innerText = "0"; 
+                if (elRemHoursOnly) elRemHoursOnly.innerText = "0"; 
+                if (elHeaderAnnualDays) elHeaderAnnualDays.innerText = "0"; 
+                if (elHeaderAnnualHours) elHeaderAnnualHours.innerText = "0"; 
+                if (elHeaderCompDays) elHeaderCompDays.innerText = "0"; 
+                if (elHeaderCompHours) elHeaderCompHours.innerText = "0"; 
+                if (elCompensatoryBalanceDisplay) elCompensatoryBalanceDisplay.innerText = "0";
+                if (elServiceDurationLabel) elServiceDurationLabel.innerText = "-"; 
+                if (elAnnualRateDays) elAnnualRateDays.innerText = "0"; 
+                if (elMonthlyRateHours) elMonthlyRateHours.innerText = "0";
+                if (elMonthlyRateMinutes) elMonthlyRateMinutes.innerText = "0";
+                return;
+            }
+            
+            const res = getSplitBalance({ jobId, hireDate: hi });
+            const archivedRecord = calculatedBalances.find(b => b.jobId.toLowerCase() === jobId.toLowerCase());
+            
+            let finalHeaderAnnualH = 0;
+            let finalHeaderCompH = 0;
+
+            if (archivedRecord) {
+                const totalTaken = takenLeavesEntries.filter(tl => tl.jobId.toString().toLowerCase() === jobId.toLowerCase()).reduce((sum, entry) => sum + entry.total, 0);
+                const dynamicCompHours = extraHoursEntries.filter(ex => ex.jobId.toString().toLowerCase() === jobId.toLowerCase()).reduce((sum, entry) => sum + entry.hours, 0);
+                
+                let remTaken = totalTaken;
+                let finalComp = dynamicCompHours;
+                let finalAnnual = archivedRecord.annualHours;
+
+                let fromComp = Math.min(finalComp, remTaken);
+                finalComp -= fromComp;
+                remTaken -= fromComp;
+
+                let fromAnnual = Math.min(finalAnnual, remTaken);
+                finalAnnual -= fromAnnual;
+
+                finalHeaderAnnualH = finalAnnual;
+                finalHeaderCompH = finalComp;
+            } else {
+                finalHeaderAnnualH = 0;
+                finalHeaderCompH = 0;
+            }
+
+            currentCalculatedHoursAnnual = res.annual; 
+            currentCalculatedHoursComp = finalHeaderCompH;
+            
+            const hd = new Date(hi), td_now = new Date();
+            let calcStart = new Date(hd); 
+            if (hd.getDate() <= 15) { calcStart.setDate(1); } else { calcStart.setMonth(calcStart.getMonth() + 1); calcStart.setDate(1); }
+            
+            const eu = manualUsageOverrides[jobId] || {};
+            let poolCompForTable = extraHoursEntries
+                .filter(e => e.jobId.toString().toLowerCase() === jobId.toString().toLowerCase())
+                .reduce((sum, entry) => sum + entry.hours, 0);
+
+            const totalTakenForTable = takenLeavesEntries
+                .filter(tl => tl.jobId.toString().toLowerCase() === jobId.toString().toLowerCase())
+                .reduce((sum, entry) => sum + entry.total, 0);
+
+            let html = '';
+            let carry = 0;
+            for (let y = calcStart.getFullYear(); y <= td_now.getFullYear(); y++) {
+                let earned = 0;
+                let sM = (y === calcStart.getFullYear()) ? calcStart.getMonth() : 0, eM = (y === td_now.getFullYear()) ? td_now.getMonth() : 12;
+                for (let m = sM; m < eM; m++) earned += (getAnnualRate(hd, new Date(y, m, 15)) * 8) / 12;
+                
+                const manualUsed = eu[y] || 0;
+                let usedFromComp = Math.min(manualUsed, poolCompForTable); poolCompForTable -= usedFromComp;
+                let usedFromAnnual = manualUsed - usedFromComp;
+                let uFC = Math.min(usedFromAnnual, Math.max(0, carry)), remU = (carry < 0) ? (usedFromAnnual + Math.abs(carry)) : (usedFromAnnual - uFC), drop = Math.max(0, carry - uFC), bal = earned - remU;
+                const isC = (y === td_now.getFullYear()); let dH = isC ? (bal + drop) : bal;
+                
+                if(isC) {
+                   let remTaken = totalTakenForTable;
+                   let fromC = Math.min(poolCompForTable, remTaken);
+                   poolCompForTable -= fromC;
+                   remTaken -= fromC;
+                   dH -= remTaken;
+                }
+
+                html += `<tr class="${isC ? 'highlight-row' : ''} text-start text-[#2A3D71]"><td class="gs-cell font-bold">${y}</td><td class="gs-cell">${Math.round(earned)} ساعة</td><td class="gs-cell text-center">${(carry/8).toFixed(3)} يوم</td><td class="gs-cell text-center"><input type="number" class="w-16 text-center text-[#2A3D71] font-bold bg-transparent" value="${Math.round(manualUsed)}" onchange="updateManualUsage(${y}, this.value)"></td><td class="gs-cell text-center italic text-[10px]">${Math.round(drop)} ساعة</td><td class="gs-cell text-center font-bold">${Math.round(dH)} ساعة</td><td class="gs-cell text-center font-bold">${(dH/8).toFixed(3)} يوم</td></tr>`;
+                carry = bal;
+            }
+            
+            if (elYearlyTableBody) elYearlyTableBody.innerHTML = html;
+            
+            if (elHeaderAnnualDays) elHeaderAnnualDays.innerText = Math.floor(finalHeaderAnnualH / 8);
+            if (elHeaderAnnualHours) elHeaderAnnualHours.innerText = Math.round(finalHeaderAnnualH % 8);
+            if (elHeaderCompDays) elHeaderCompDays.innerText = Math.floor(finalHeaderCompH / 8);
+            if (elHeaderCompHours) elHeaderCompHours.innerText = Math.round(finalHeaderCompH % 8);
+
+            const grandTotalHours = finalHeaderAnnualH + finalHeaderCompH;
+            if (elTotalBalanceDays) elTotalBalanceDays.innerText = Math.floor(grandTotalHours / 8);
+            if (elRemHoursOnly) elRemHoursOnly.innerText = Math.round(grandTotalHours % 8);
+            
+            let sy = td_now.getFullYear() - hd.getFullYear(), sm = td_now.getMonth() - hd.getMonth();
+            if (sm < 0 || (sm === 0 && td_now.getDate() < hd.getDate())) { sy--; sm = (sm + 12) % 12; }
+            
+            if (elServiceDurationLabel) elServiceDurationLabel.innerText = formatDuration(sy, sm);
+            
+            // تحديث الاستحقاق السنوي والشهري
+            const currentAnnualRate = getAnnualRate(hd, td_now);
+            if (elAnnualRateDays) elAnnualRateDays.innerText = currentAnnualRate;
+            
+            const monthlyEntitlementTotalMinutes = (currentAnnualRate * 8 * 60) / 12;
+            if (elMonthlyRateHours) elMonthlyRateHours.innerText = Math.floor(monthlyEntitlementTotalMinutes / 60);
+            if (elMonthlyRateMinutes) elMonthlyRateMinutes.innerText = Math.round(monthlyEntitlementTotalMinutes % 60);
+            
+            if (elCompensatoryBalanceDisplay) elCompensatoryBalanceDisplay.innerText = Math.round(res.comp);
+        }
+
+        function switchTab(tab) {
+            ['Main', 'Employees', 'Extra', 'Calculated', 'Stats', 'Guidelines'].forEach(tN => {
+                const el = document.getElementById(`tab${tN}Content`), btn = document.getElementById(`tab${tN}Btn`);
+                if (el) el.classList.add('hidden'); if (btn) btn.classList.remove('active');
+            });
+            const content = document.getElementById(`tab${tab.charAt(0).toUpperCase() + tab.slice(1)}Content`);
+            const btn = document.getElementById(`tab${tab.charAt(0).toUpperCase() + tab.slice(1)}Btn`);
+            if (content) content.classList.remove('hidden'); if (btn) btn.classList.add('active');
+            if (tab === 'employees') renderEmployees(); 
+            if (tab === 'calculated') { renderCalculatedBalances(); renderTakenLeavesTable(); }
+            if (tab === 'stats') renderStatistics(); 
+            if (tab === 'extra') renderExtraHoursTable();
+        }
+
+        // --- Extra Hours Functions ---
+        function switchExtraSubTab(subTab) {
+            const entrySec = document.getElementById('extraSectionEntry'), listSec = document.getElementById('extraSectionList');
+            const entryBtn = document.getElementById('extraTabEntryBtn'), listBtn = document.getElementById('extraTabListBtn');
+            
+            entrySec.classList.add('hidden'); listSec.classList.add('hidden');
+            
+            entryBtn.classList.remove('active');
+            listBtn.classList.remove('active');
+
+            if(subTab === 'entry') {
+                entrySec.classList.remove('hidden');
+                entryBtn.classList.add('active');
+            } else {
+                listSec.classList.remove('hidden');
+                listBtn.classList.add('active');
+                renderExtraHoursTable();
+            }
+        }
+
+        // --- Calculated & Leaves Functions ---
+        function switchCalcSubTab(subTab) {
+            const listSec = document.getElementById('calcSectionList'), leavesSec = document.getElementById('calcSectionLeaves');
+            const listBtn = document.getElementById('calcTabListBtn'), leavesBtn = document.getElementById('calcTabLeavesBtn');
+            
+            listSec.classList.add('hidden'); leavesSec.classList.add('hidden');
+            
+            listBtn.classList.remove('active');
+            leavesBtn.classList.remove('active');
+
+            if(subTab === 'list') {
+                listSec.classList.remove('hidden');
+                listBtn.classList.add('active');
+                renderCalculatedBalances();
+            } else {
+                leavesSec.classList.remove('hidden');
+                leavesBtn.classList.add('active');
+                renderTakenLeavesTable();
+            }
+        }
+
+        async function addTakenLeaveEntry() {
+            const j = document.getElementById('leaveTakenJobId')?.value.trim();
+            const reqD = document.getElementById('leaveTakenReqDate')?.value;
+            const reqT = document.getElementById('leaveTakenReqTime')?.value;
+            const startD = document.getElementById('leaveTakenStartDate')?.value;
+            const startT = document.getElementById('leaveTakenStartTime')?.value;
+            const retD = document.getElementById('leaveTakenReturnDate')?.value;
+            const reason = document.getElementById('leaveTakenReason')?.value.trim();
+            const totEl = document.getElementById('leaveTakenTotal');
+            const tot = parseFloat(totEl ? totEl.value : NaN);
+            
+            if (!j || !reqD || !reqT || !startD || !retD || !reason || isNaN(tot)) return showNotification('alert_missing_fields', 'error');
+            const emp = employees.find(e => e.jobId.toLowerCase() === j.toLowerCase());
+            if (!emp) return showNotification('الموظف غير موجود في السجل.', 'error');
+            
+            const { data, error } = await sb.from('taken_leaves').insert({ user_id: currentUser.id, job_id: emp.jobId, name: emp.name, dept: emp.dept, company: emp.company, req_date: reqD, req_time: reqT, start_date: startD, start_time: startT || null, return_date: retD, reason: reason, total: tot }).select();
+            if (error) { showNotification(error.message, 'error'); return; }
+            const row = data[0];
+            takenLeavesEntries.unshift({ ...row, jobId: row.job_id, reqDate: row.req_date, reqTime: row.req_time, startDate: row.start_date, startTime: row.start_time, returnDate: row.return_date, total: Number(row.total) });
+            
+            showNotification('تمت إضافة سجل الإجازة بنجاح.', 'success');
+            document.getElementById('leaveTakenReqDate').value = ''; 
+            document.getElementById('leaveTakenReqTime').value = ''; 
+            document.getElementById('leaveTakenStartDate').value = ''; 
+            document.getElementById('leaveTakenStartTime').value = ''; 
+            document.getElementById('leaveTakenReturnDate').value = ''; 
+            document.getElementById('leaveTakenReason').value = ''; 
+            if(totEl) totEl.value = '';
+            renderTakenLeavesTable();
+            calculateEverything(); 
+        }
+
+        function renderTakenLeavesTable() {
+            const body = document.getElementById('takenLeavesTableBody'); 
+            if (!body) return; 
+            
+            body.innerHTML = '';
+            
+            takenLeavesEntries.forEach((entry, idx) => {
+                const tr = document.createElement('tr'); 
+                tr.className = "hover:bg-slate-50 border-b transition-colors text-[#2A3D71]";
+                tr.innerHTML = `
+                    <td class="py-3 px-2 text-xs">${idx + 1}</td>
+                    <td class="py-3 px-2 font-mono text-xs">${entry.jobId}</td>
+                    <td class="py-3 px-2 font-bold">${entry.name}</td>
+                    <td class="py-3 px-2 text-xs">${entry.dept || '-'}</td>
+                    <td class="py-3 px-2 text-xs">${entry.company || '-'}</td>
+                    <td class="py-3 px-2 text-center text-xs font-mono">${entry.reqDate}</td>
+                    <td class="py-3 px-2 text-center text-xs font-mono">${entry.reqTime}</td>
+                    <td class="py-3 px-2 text-center font-bold text-xs">${entry.startDate}</td>
+                    <td class="py-3 px-2 text-center text-xs font-mono">${entry.startTime || '-'}</td>
+                    <td class="py-3 px-2 text-center font-bold text-xs">${entry.returnDate}</td>
+                    <td class="py-3 px-2 text-center text-xs">${entry.reason}</td>
+                    <td class="py-3 px-2 text-center font-bold text-emerald-600">${entry.total}</td>
+                    <td class="py-3 px-2 text-center"><button onclick="deleteTakenLeaveEntry(${entry.id})" class="action-delete-btn">🗑️</button></td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        async function deleteTakenLeaveEntry(id) {
+            await sb.from('taken_leaves').delete().eq('id', id);
+            takenLeavesEntries = takenLeavesEntries.filter(e => e.id !== id);
+            renderTakenLeavesTable();
+            calculateEverything(); 
+        }
+
+        async function addExtraHoursEntry() {
+            const j = document.getElementById('extraHoursJobId')?.value.trim();
+            const d = document.getElementById('extraHoursDate')?.value;
+            const hEl = document.getElementById('extraHoursValue');
+            const h = parseFloat(hEl ? hEl.value : NaN);
+            
+            if (!j || !d || isNaN(h)) return showNotification('alert_missing_fields', 'error');
+            const inputDate = new Date(d); inputDate.setHours(0,0,0,0);
+            const today = new Date(); today.setHours(0,0,0,0);
+            if (inputDate > today) return showNotification('alert_future_date', 'error');
+            const emp = employees.find(e => e.jobId.toLowerCase() === j.toLowerCase());
+            if (!emp) return showNotification('الموظف غير موجود في السجل.', 'error');
+            const { data, error } = await sb.from('extra_hours').insert({ user_id: currentUser.id, job_id: emp.jobId, name: emp.name, date: d, hours: h }).select();
+            if (error) { showNotification(error.message, 'error'); return; }
+            extraHoursEntries.unshift({ ...data[0], jobId: data[0].job_id });
+            
+            showNotification('تمت إضافة ساعات الموظف بنجاح.', 'success');
+            calculateEverything();
+            document.getElementById('extraHoursDate').value = ''; 
+            if(hEl) hEl.value = '';
+        }
+
+        function renderExtraHoursTable() {
+            const body = document.getElementById('extraHoursTableBody'); 
+            const totalBox = document.getElementById('extraFilteredTotal');
+            if (!body) return; 
+            
+            const filterName = normalizeArabicText(document.getElementById('extraFilterName')?.value || "").toLowerCase();
+            const filterDateFrom = document.getElementById('extraFilterDateFrom')?.value || "";
+            const filterDateTo = document.getElementById('extraFilterDateTo')?.value || "";
+
+            let sum = 0;
+            body.innerHTML = '';
+            
+            extraHoursEntries.forEach((entry, idx) => {
+                const emp = employees.find(e => e.jobId.toLowerCase() === entry.jobId.toLowerCase()) || {};
+                const nameNorm = normalizeArabicText(entry.name).toLowerCase();
+                const idNorm = entry.jobId.toLowerCase();
+
+                if (filterName && !nameNorm.includes(filterName) && !idNorm.includes(filterName)) return;
+                if (filterDateFrom && entry.date < filterDateFrom) return;
+                if (filterDateTo && entry.date > filterDateTo) return;
+
+                sum += parseFloat(entry.hours) || 0;
+
+                const tr = document.createElement('tr'); 
+                tr.className = "hover:bg-slate-50 border-b transition-colors text-[#2A3D71]";
+                tr.innerHTML = `
+                    <td class="py-3 px-2 text-xs">${idx + 1}</td>
+                    <td class="py-3 px-2 font-mono text-xs">${entry.jobId}</td>
+                    <td class="py-3 px-2 font-bold">${entry.name}</td>
+                    <td class="py-3 px-2 text-xs">${emp.dept || '-'}</td>
+                    <td class="py-3 px-2 font-mono text-xs">${emp.hireDate || '-'}</td>
+                    <td class="py-3 px-2 text-xs">${emp.company || '-'}</td>
+                    <td class="py-3 px-2 text-center font-bold text-xs">${entry.date}</td>
+                    <td class="py-3 px-2 text-center font-bold">${entry.hours}</td>
+                    <td class="py-3 px-2 text-center"><button onclick="deleteExtraEntry(${entry.id})" class="action-delete-btn">🗑️</button></td>
+                `;
+                body.appendChild(tr);
+            });
+            
+            if(totalBox) totalBox.innerText = sum;
+        }
+
+        async function deleteExtraEntry(id) {
+            await sb.from('extra_hours').delete().eq('id', id);
+            extraHoursEntries = extraHoursEntries.filter(e => e.id !== id);
+            renderExtraHoursTable(); calculateEverything();
+        }
+
+        function resetPageAndRender() { currentPage = 1; renderEmployees(); }
+        function resetCalcPageAndRender() { calcCurrentPage = 1; renderCalculatedBalances(); }
+
+        function renderEmployees() {
+            const listBody = document.getElementById('employeesListBody'); if (!listBody) return;
+            const deptsSet = new Set(), companiesSet = new Set();
+            employees.forEach(e => { if (e.dept) deptsSet.add(e.dept.toString().trim()); if (e.company) companiesSet.add(e.company.toString().trim()); });
+            uniqueDepts = Array.from(deptsSet).sort(); uniqueCompanies = Array.from(companiesSet).sort();
+            const filterDept = document.getElementById('filterDept'), curD = filterDept ? filterDept.value : "";
+            if (filterDept) { filterDept.innerHTML = `<option value="">كل الأقسام</option>`; uniqueDepts.forEach(d => { const o = document.createElement('option'); o.value = d; o.innerText = d; if(d === curD) o.selected = true; filterDept.appendChild(o); }); }
+            const nameF = normalizeArabicText(document.getElementById('filterName')?.value || "").toLowerCase(), dateF = document.getElementById('filterDate')?.value || "";
+            const filtered = employees.map((emp, index) => ({ ...emp, originalIndex: index })).filter(e => {
+                if (nameF && !normalizeArabicText(e.name).toLowerCase().includes(nameF)) return false;
+                if (curD && (e.dept || "").toString().trim() !== curD) return false;
+                if (dateF && (!e.hireDate || !e.hireDate.includes(dateF))) return false;
+                return true;
+            });
+            document.getElementById('empCountBadgeTotal').innerText = `الإجمالي: ${employees.length}`;
+            document.getElementById('empCountBadgeFiltered').innerText = `بحسب التصفية: ${filtered.length}`;
+            const totalP = Math.ceil(filtered.length / itemsPerPage), paginated = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+            listBody.innerHTML = "";
+            paginated.forEach((e, idx) => {
+                const tr = document.createElement('tr'); tr.className = "hover:bg-slate-50 border-b transition-colors group text-[#2A3D71]";
+                tr.innerHTML = `<td class="py-4 px-2 text-xs text-start">${((currentPage - 1) * itemsPerPage) + idx + 1}</td><td class="py-4 px-2 font-mono text-xs text-start">${e.jobId || '-'}</td><td class="py-4 px-2 font-bold text-start">${e.name}</td><td class="py-4 px-2 text-xs text-start">${e.dept || '-'}</td><td class="py-4 px-2 font-mono text-xs text-start">${e.hireDate}</td><td class="py-4 px-2 text-xs text-start">${e.company || '-'}</td><td class="py-4 px-2 flex gap-2"><button onclick="loadEmployee(${e.originalIndex})" class="action-select-btn">اختيار</button><button onclick="confirmDeleteEmployee(${e.originalIndex})" class="action-delete-btn">🗑️</button></td>`;
+                listBody.appendChild(tr);
+            });
+            renderPaginationControls(totalP, filtered.length);
+        }
+
+        function renderCalculatedBalances() {
+            const b = document.getElementById('calculatedListBody'); if (!b) return; b.innerHTML = "";
+            const idF = document.getElementById('archiveFilterID')?.value.toLowerCase() || "", nameF = normalizeArabicText(document.getElementById('archiveFilterName')?.value || "").toLowerCase();
+            const filtered = calculatedBalances.filter(e => {
+                if (idF && !(e.jobId || "").toString().toLowerCase().includes(idF)) return false;
+                if (nameF && !normalizeArabicText(e.name).toLowerCase().includes(nameF)) return false;
+                return true;
+            });
+            document.getElementById('calcCountBadgeTotal').innerText = `الإجمالي المؤرشف: ${calculatedBalances.length}`;
+            document.getElementById('calcCountBadgeFiltered').innerText = `بحسب التصفية: ${filtered.length}`;
+            const totalP = Math.ceil(filtered.length / calcItemsPerPage), paginated = filtered.slice((calcCurrentPage - 1) * calcItemsPerPage, calcCurrentPage * calcItemsPerPage);
+            paginated.forEach((e, i) => {
+                const globalIndex = ((calcCurrentPage - 1) * calcItemsPerPage) + i + 1;
+                
+                const emp = employees.find(empData => empData.jobId.toLowerCase() === (e.jobId || "").toLowerCase()) || {};
+                const totalTaken = takenLeavesEntries.filter(tl => tl.jobId.toString().toLowerCase() === (e.jobId || "").toString().toLowerCase()).reduce((sum, entry) => sum + entry.total, 0);
+                const dynamicCompHours = extraHoursEntries.filter(ex => ex.jobId.toString().toLowerCase() === (e.jobId || "").toString().toLowerCase()).reduce((sum, entry) => sum + entry.hours, 0);
+                
+                let remTaken = totalTaken;
+                let finalComp = dynamicCompHours;
+                let finalAnnual = e.annualHours;
+
+                let fromComp = Math.min(finalComp, remTaken);
+                finalComp -= fromComp;
+                remTaken -= fromComp;
+
+                let fromAnnual = Math.min(finalAnnual, remTaken);
+                finalAnnual -= fromAnnual;
+
+                const dynamicTotalDays = ((finalAnnual + finalComp) / HOURS_PER_DAY).toFixed(3);
+                const annualDays = (finalAnnual / HOURS_PER_DAY).toFixed(3);
+
+                const tr = document.createElement('tr'); tr.className = "hover:bg-slate-50 border-b text-start text-xs text-[#2A3D71]";
+                tr.innerHTML = `<td class="py-4 px-2">${globalIndex}</td><td class="py-4 px-2 font-mono">${e.jobId}</td><td class="py-4 px-2 font-bold">${e.name}</td><td class="py-4 px-2">${emp.dept || '-'}</td><td class="py-4 px-2 font-mono">${emp.hireDate || '-'}</td><td class="py-4 px-2">${emp.company || '-'}</td><td class="py-4 px-2 font-mono">${e.calcDate}</td><td class="py-4 px-2 font-bold">${finalAnnual}</td><td class="py-4 px-2 font-bold">${annualDays}</td><td class="py-4 px-2 font-bold">${finalComp}</td><td class="py-4 px-2 font-bold">${totalTaken}</td><td class="py-4 px-2 font-black">${dynamicTotalDays}</td><td class="py-4 px-4"><button onclick="confirmDeleteCalculated(${calculatedBalances.indexOf(e)})" class="action-delete-btn">🗑️</button></td>`;
+                b.appendChild(tr);
+            });
+            renderCalcPaginationControls(totalP, filtered.length);
+        }
+
+        function renderPaginationControls(tp, filteredTotal) { 
+            const c = document.getElementById('paginationControls'); if (!c) return; c.innerHTML = ''; 
+            if (filteredTotal > 0) { const startRec = ((currentPage - 1) * itemsPerPage) + 1, endRec = Math.min(currentPage * itemsPerPage, filteredTotal); c.innerHTML += `<span class="bg-slate-50 text-slate-600 border border-slate-100 px-4 py-1.5 rounded-full font-bold shadow-sm mx-4 text-[10px]">عرض ${startRec} إلى ${endRec} من ${filteredTotal}</span>`; }
+            if (tp <= 1) return; const b = (tx, ta, ac = false, di = false) => { const el = document.createElement('button'); el.innerText = tx; el.className = `px-2 mx-1 ${ac ? 'bg-[#2A3D71] text-white rounded font-bold' : (di ? 'opacity-30' : 'hover:bg-slate-100')}`; if (!di && !ac) el.onclick = () => { currentPage = ta; renderEmployees(); }; c.appendChild(el); }; b('«', currentPage - 1, false, currentPage === 1); for (let i = 1; i <= tp; i++) if (i === 1 || (i >= currentPage - 1 && i <= currentPage + 1) || i === tp) b(i, i, i === currentPage); b('»', currentPage + 1, false, currentPage === tp); 
+        }
+
+        function renderCalcPaginationControls(tp, filteredTotal) { 
+            const c = document.getElementById('calcPaginationControls'); if (!c) return; c.innerHTML = ''; 
+            if (filteredTotal > 0) { const startRec = ((calcCurrentPage - 1) * calcItemsPerPage) + 1, endRec = Math.min(calcCurrentPage * calcItemsPerPage, filteredTotal); c.innerHTML += `<span class="bg-slate-50 text-slate-600 border border-slate-100 px-4 py-1.5 rounded-full font-bold shadow-sm mx-4 text-[10px]">عرض ${startRec} إلى ${endRec} من ${filteredTotal}</span>`; }
+            if (tp <= 1) return; const b = (tx, ta, ac = false, di = false) => { const el = document.createElement('button'); el.innerText = tx; el.className = `px-2 mx-1 ${ac ? 'bg-[#2A3D71] text-white rounded font-bold' : (di ? 'opacity-30' : 'hover:bg-slate-100')}`; if (!di && !ac) el.onclick = () => { calcCurrentPage = ta; renderCalculatedBalances(); }; c.appendChild(el); }; b('«', calcCurrentPage - 1, false, calcCurrentPage === 1); for (let i = 1; i <= tp; i++) if (i === 1 || (i >= calcCurrentPage - 1 && i <= calcCurrentPage + 1) || i === calcCurrentPage) b(i, i, i === calcCurrentPage); b('»', calcCurrentPage + 1, false, calcCurrentPage === tp); 
+        }
+
+        async function addEmployeeManual() {
+            const j = document.getElementById('newEmpJobId').value.trim(); if (!j) return;
+            if (employees.some(e => e.jobId.toLowerCase() === j.toLowerCase())) return showNotification('alert_duplicate_emp', 'error', j);
+            const empData = { user_id: currentUser.id, job_id: j, name: document.getElementById('newEmpName').value.trim(), dept: document.getElementById('newEmpDept').value.trim(), company: document.getElementById('newEmpCompany').value.trim(), hire_date: document.getElementById('newEmpDate').value || null };
+            const { data, error } = await sb.from('employees').insert(empData).select();
+            if (error) { showNotification(error.message, 'error'); return; }
+            employees.unshift({ ...data[0], jobId: data[0].job_id, hireDate: data[0].hire_date });
+            ['newEmpName','newEmpJobId','newEmpDept','newEmpCompany','newEmpDate'].forEach(id=>document.getElementById(id).value='');
+            renderEmployees(); showNotification('alert_restored', 'success'); renderStatistics();
+        }
+
+        async function handleExcelUpload(e) {
+            const f = e.target.files[0]; if (!f) return;
+            const r = new FileReader(); r.onload = async function(evt) {
+                try {
+                    showLoading();
+                    const data = new Uint8Array(evt.target.result), wb = XLSX.read(data, { type: 'array' }), js = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+                    const imported = js.map(row => { const n = row['اسم الموظف'], j = (row['الرقم الوظيفي'] || "").toString().trim(); if (n && j) return { user_id: currentUser.id, job_id: j, name: n, dept: row['القسم'] || "", company: row['الشركة المتعاقدة'] || "", hire_date: (typeof row['تاريخ المباشرة'] === 'number') ? XLSX.SSF.format('yyyy-mm-dd', row['تاريخ المباشرة']) : (row['تاريخ المباشرة'] || null) }; return null; }).filter(x => x !== null);
+                    if (imported.length > 0) {
+                        await sb.from('employees').delete().eq('user_id', currentUser.id);
+                        const { error } = await sb.from('employees').insert(imported);
+                        if (error) { showNotification(error.message, 'error'); hideLoading(); return; }
+                        await loadAllData();
+                        showNotification('alert_excel_success', 'success');
+                    }
+                } catch (err) { showNotification('خطأ في الملف.', 'error'); }
+                hideLoading();
+                e.target.value = '';
+            }; r.readAsArrayBuffer(f);
+        }
+
+        function exportBackup() { const d = JSON.stringify({ manualUsageOverrides, employees: employees.map(e => ({name: e.name, jobId: e.jobId, dept: e.dept, company: e.company, hireDate: e.hireDate})), calculatedBalances: calculatedBalances.map(e => ({name: e.name, jobId: e.jobId, calcDate: e.calcDate, annualHours: e.annualHours, compHours: e.compHours, totalDays: e.totalDays})), extraHoursEntries: extraHoursEntries.map(e => ({jobId: e.jobId, name: e.name, date: e.date, hours: e.hours})), takenLeavesEntries: takenLeavesEntries.map(e => ({jobId: e.jobId, name: e.name, dept: e.dept, company: e.company, reqDate: e.reqDate, reqTime: e.reqTime, startDate: e.startDate, startTime: e.startTime, returnDate: e.returnDate, reason: e.reason, total: e.total})) }); const b = new Blob([d], {type: "application/json"}); const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `Backup.json`; a.click(); }
+        function importBackup(ev) { const f = ev.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = async function(e) { try { showLoading(); const d = JSON.parse(e.target.result); await sb.from('employees').delete().eq('user_id', currentUser.id); await sb.from('extra_hours').delete().eq('user_id', currentUser.id); await sb.from('calculated_balances').delete().eq('user_id', currentUser.id); await sb.from('taken_leaves').delete().eq('user_id', currentUser.id); await sb.from('usage_overrides').delete().eq('user_id', currentUser.id); if (d.employees?.length) { const emps = d.employees.map(e => ({ user_id: currentUser.id, job_id: e.jobId, name: e.name, dept: e.dept || '', company: e.company || '', hire_date: e.hireDate || null })); await sb.from('employees').insert(emps); } if (d.extraHoursEntries?.length) { const exs = d.extraHoursEntries.map(e => ({ user_id: currentUser.id, job_id: e.jobId, name: e.name || '', date: e.date, hours: e.hours })); await sb.from('extra_hours').insert(exs); } if (d.calculatedBalances?.length) { const cbs = d.calculatedBalances.map(e => ({ user_id: currentUser.id, job_id: e.jobId, name: e.name, calc_date: e.calcDate, annual_hours: e.annualHours, comp_hours: e.compHours, total_days: e.totalDays })); await sb.from('calculated_balances').insert(cbs); } if (d.takenLeavesEntries?.length) { const tls = d.takenLeavesEntries.map(e => ({ user_id: currentUser.id, job_id: e.jobId, name: e.name || '', dept: e.dept || '', company: e.company || '', req_date: e.reqDate || null, req_time: e.reqTime || null, start_date: e.startDate || null, start_time: e.startTime || null, return_date: e.returnDate || null, reason: e.reason || '', total: e.total })); await sb.from('taken_leaves').insert(tls); } if (d.manualUsageOverrides) { const ovrs = []; Object.entries(d.manualUsageOverrides).forEach(([jid, years]) => { Object.entries(years).forEach(([yr, hrs]) => { ovrs.push({ user_id: currentUser.id, job_id: jid, year: parseInt(yr), hours: parseFloat(hrs) }); }); }); if (ovrs.length) await sb.from('usage_overrides').insert(ovrs); } await loadAllData(); showNotification('alert_restored', 'success'); } catch (err) { showNotification('خطأ في الملف.', 'error'); console.error(err); } hideLoading(); }; r.readAsText(f); }
+
+        function checkBulkRegister() { const df = document.getElementById('filterDept').value; if (!df) return showNotification('يرجى اختيار قسم أولاً من قائمة التصفية.', 'error'); openResetModal('bulk_confirm', `هل أنت متأكد من تسجيل أرصدة جميع الموظفين في قسم: (${df})؟`); }
+        async function executeBulkRegister() {
+            const df = document.getElementById('filterDept').value;
+            const filt = employees.filter(e => (e.dept || "").toString().trim() === df);
+            let count = 0;
+            const toInsert = [];
+            filt.forEach(e => {
+                if (!calculatedBalances.some(b => b.jobId.toLowerCase() === e.jobId.toLowerCase())) {
+                    const res = getSplitBalance(e);
+                    toInsert.push({ user_id: currentUser.id, job_id: e.jobId, name: e.name, calc_date: new Date().toLocaleDateString('ar-CA'), annual_hours: Math.round(res.annual), comp_hours: Math.round(res.comp), total_days: parseFloat(((res.annual + res.comp) / 8).toFixed(3)) });
+                    count++;
+                }
+            });
+            if (count > 0) {
+                const { error } = await sb.from('calculated_balances').insert(toInsert);
+                if (error) { showNotification(error.message, 'error'); return; }
+                await loadAllData();
+                showNotification('alert_bulk_success', 'success', count.toString()); switchTab('calculated');
+            } else { showNotification('alert_bulk_none', 'info'); }
+        }
+
+        async function saveCalculatedBalance() {
+            const n = document.getElementById('employeeName')?.value, j = document.getElementById('employeeJobIdDisplay')?.value;
+            if (!n || !j || j === "-") return showNotification('alert_choose_emp', 'error');
+            if (calculatedBalances.some(b => b.jobId.toLowerCase() === j.toLowerCase())) return showNotification('alert_duplicate', 'error', j);
+            const row = { user_id: currentUser.id, job_id: j, name: n, calc_date: new Date().toLocaleDateString('ar-CA'), annual_hours: Math.round(currentCalculatedHoursAnnual), comp_hours: Math.round(currentCalculatedHoursComp), total_days: parseFloat(((currentCalculatedHoursAnnual + currentCalculatedHoursComp) / 8).toFixed(3)) };
+            const { error } = await sb.from('calculated_balances').insert(row);
+            if (error) { showNotification(error.message, 'error'); return; }
+            await loadAllData(); showNotification('alert_pinned', 'success'); calculateEverything(); switchTab('calculated');
+        }
+
+        function confirmDeleteEmployee(i) { pendingDeleteIdx = i; pendingDeleteType = 'employee'; openResetModal('delete_single', `حذف بيانات الموظف: (${employees[i].name})؟`); }
+        function confirmDeleteCalculated(i) { pendingDeleteIdx = i; pendingDeleteType = 'calculated'; openResetModal('delete_single', `حذف سجل الرصيد لـ: (${calculatedBalances[i].name})؟`); }
+
+        function openResetModal(type, customMsg = null) { 
+            const modal = document.getElementById('resetModal'), msgEl = document.getElementById('modalMessage');
+            if (!modal) return; modal.classList.remove('hidden'); 
+            msgEl.innerText = customMsg || (type === 'clear_all' ? "سيتم مسح كافة البيانات نهائياً. هل تريد الاستمرار؟" : (type === 'clear_calculated' ? "سيتم حذف سجلات الأرصدة المؤرشفة فقط؟" : ""));
+            document.getElementById('modalConfirmBtn').onclick = async () => { 
+                if(type === 'clear_all') {
+                    showLoading();
+                    await sb.from('employees').delete().eq('user_id', currentUser.id);
+                    await sb.from('extra_hours').delete().eq('user_id', currentUser.id);
+                    await sb.from('calculated_balances').delete().eq('user_id', currentUser.id);
+                    await sb.from('taken_leaves').delete().eq('user_id', currentUser.id);
+                    await sb.from('usage_overrides').delete().eq('user_id', currentUser.id);
+                    manualUsageOverrides = {}; employees = []; calculatedBalances = []; extraHoursEntries = []; takenLeavesEntries = [];
+                    ['employeeName','employeeJobIdDisplay','employeeDeptDisplay','employeeCompanyDisplay', 'hireDate','hireDateDisplay', 'extraHoursJobId', 'extraHoursDate', 'extraHoursValue', 'leaveTakenJobId', 'leaveTakenReqDate', 'leaveTakenReqTime', 'leaveTakenStartDate', 'leaveTakenStartTime', 'leaveTakenReturnDate', 'leaveTakenReason', 'leaveTakenTotal'].forEach(id=>{
+                        const el = document.getElementById(id);
+                        if(el) el.value='';
+                    });
+                    calculateEverything(); renderEmployees(); renderCalculatedBalances(); renderTakenLeavesTable(); renderStatistics(); renderExtraHoursTable();
+                    hideLoading();
+                } else if (type === 'clear_calculated') {
+                    await sb.from('calculated_balances').delete().eq('user_id', currentUser.id);
+                    calculatedBalances = []; renderCalculatedBalances(); calculateEverything();
+                } else if (type === 'delete_single') {
+                    if (pendingDeleteType === 'employee') {
+                        const emp = employees[pendingDeleteIdx];
+                        if (emp) await sb.from('employees').delete().eq('id', emp.id);
+                        employees.splice(pendingDeleteIdx, 1); renderEmployees(); renderStatistics();
+                    } else if (pendingDeleteType === 'calculated') {
+                        const cb = calculatedBalances[pendingDeleteIdx];
+                        if (cb) await sb.from('calculated_balances').delete().eq('id', cb.id);
+                        calculatedBalances.splice(pendingDeleteIdx, 1); renderCalculatedBalances(); calculateEverything();
+                    }
+                } else if (type === 'bulk_confirm') { await executeBulkRegister(); }
+                closeResetModal(); 
+            }; 
+        }
+        function closeResetModal() { document.getElementById('resetModal').classList.add('hidden'); }
+
+        function changeItemsPerPage() { const s = document.getElementById('itemsPerPageSelect'), c = document.getElementById('customItemsPerPage'); if (s.value === 'custom') { c.classList.remove('hidden'); c.focus(); } else { c.classList.add('hidden'); itemsPerPage = parseInt(s.value); resetPageAndRender(); } }
+        function applyCustomItemsPerPage() { const v = parseInt(document.getElementById('customItemsPerPage').value); if (v > 0) { itemsPerPage = v; resetPageAndRender(); } }
+        function changeCalcItemsPerPage() { const s = document.getElementById('calcItemsPerPageSelect'), c = document.getElementById('calcCustomItemsPerPage'); if (s.value === 'custom') { c.classList.remove('hidden'); c.focus(); } else { c.classList.add('hidden'); calcItemsPerPage = parseInt(s.value); resetCalcPageAndRender(); } }
+        function applyCalcCustomItemsPerPage() { const v = parseInt(document.getElementById('calcCustomItemsPerPage').value); if (v > 0) { calcItemsPerPage = v; resetCalcPageAndRender(); } }
+
+        function loadEmployee(i) {
+            const e = employees[i]; if (!e) return;
+            document.getElementById('employeeName').value = e.name; document.getElementById('employeeJobIdDisplay').value = e.jobId || ""; document.getElementById('employeeDeptDisplay').value = e.dept || "-"; document.getElementById('employeeCompanyDisplay').value = e.company || "-"; document.getElementById('hireDateDisplay').value = document.getElementById('hireDate').value = e.hireDate;
+            calculateEverything(); switchTab('main');
+        }
+
+        async function updateManualUsage(y, v) {
+            const j = document.getElementById('employeeJobIdDisplay').value;
+            if (!j || j === "-") return;
+            if (!manualUsageOverrides[j]) manualUsageOverrides[j] = {};
+            manualUsageOverrides[j][y] = parseFloat(v) || 0;
+            await sb.from('usage_overrides').upsert({ user_id: currentUser.id, job_id: j, year: y, hours: parseFloat(v) || 0 }, { onConflict: 'user_id,job_id,year' });
+            calculateEverything();
+        }
+
+        function renderStatistics() {
+            const deptsBody = document.getElementById('statsDeptsBody'), compsBody = document.getElementById('statsCompaniesBody');
+            if (!deptsBody || !compsBody) return;
+            const dCounts = {}, cCounts = {};
+            employees.forEach(e => { dCounts[e.dept || "-"] = (dCounts[e.dept || "-"] || 0) + 1; cCounts[e.company || "-"] = (cCounts[e.company || "-"] || 0) + 1; });
+            deptsBody.innerHTML = ""; Object.entries(dCounts).sort((a,b)=>b[1]-a[1]).forEach(([n, c]) => { deptsBody.innerHTML += `<div class="flex justify-between border-b py-2 text-xs text-start"><span class="font-bold text-slate-700">${n}</span><span class="bg-[#2A3D71] text-white px-2 rounded font-bold">${c}</span></div>`; });
+            compsBody.innerHTML = ""; Object.entries(cCounts).sort((a,b)=>b[1]-a[1]).forEach(([n, c]) => { compsBody.innerHTML += `<div class="flex justify-between border-b py-2 text-xs text-start"><span class="font-bold text-slate-700">${n}</span><span class="bg-[#F5C416] text-[#2A3D71] px-2 rounded font-bold">${c}</span></div>`; });
+        }
+
+        function exportToExcel() { 
+            const n = document.getElementById('employeeName')?.value || "Report"; 
+            const d = [["احتساب الإجازات"], [`الرقم الوظيفي:`, document.getElementById('employeeJobIdDisplay')?.value || "-"], [`اسم الموظف:`, n], [""], ["السنة", "المكتسب", "المرحّل", "المستهلك", "غير مرحل", "المتاح (ساعة)", "المتاح (يوم)"]]; 
+            Array.from(document.querySelectorAll("#yearlyTableBody tr")).forEach(r => { const c = r.querySelectorAll("td"); d.push([c[0].innerText, c[1].innerText, c[2].innerText, c[3].querySelector('input').value, c[4].innerText, c[5].innerText, c[6].innerText]); }); 
+            const ws = XLSX.utils.aoa_to_sheet(d), wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Report"); XLSX.writeFile(wb, `Report_${n}.xlsx`); 
+        }
+
+        function exportCalculatedToExcel() { 
+            if (calculatedBalances.length === 0) return showNotification('لا توجد بيانات.', 'error'); 
+            const d = [["تقرير الأرصدة المحتسبة"], [""], ["#", "الرقم الوظيفي", "اسم الموظف", "القسم", "تاريخ المباشرة", "الشركة المتعاقدة", "تاريخ الاحتساب", "الرصيد السنوي (ساعة)", "الرصيد السنوي (يوم)", "الرصيد التعويضي (ساعة)", "المتمتع به", "الرصيد الإجمالي (يوم)"]]; 
+            calculatedBalances.forEach((e, i) => {
+                const emp = employees.find(empData => empData.jobId.toLowerCase() === (e.jobId || "").toLowerCase()) || {};
+                const totalTaken = takenLeavesEntries.filter(tl => tl.jobId.toString().toLowerCase() === (e.jobId || "").toString().toLowerCase()).reduce((sum, entry) => sum + entry.total, 0);
+                const dynamicCompHours = extraHoursEntries.filter(ex => ex.jobId.toString().toLowerCase() === (e.jobId || "").toString().toLowerCase()).reduce((sum, entry) => sum + entry.hours, 0);
+                
+                let remTaken = totalTaken;
+                let finalComp = dynamicCompHours;
+                let finalAnnual = e.annualHours;
+
+                let fromComp = Math.min(finalComp, remTaken);
+                finalComp -= fromComp;
+                remTaken -= fromComp;
+
+                let fromAnnual = Math.min(finalAnnual, remTaken);
+                finalAnnual -= fromAnnual;
+
+                const dynamicTotalDays = ((finalAnnual + finalComp) / HOURS_PER_DAY).toFixed(3);
+                const annualDays = (finalAnnual / HOURS_PER_DAY).toFixed(3);
+
+                d.push([i + 1, e.jobId, e.name, emp.dept || '-', emp.hireDate || '-', emp.company || '-', e.calcDate, finalAnnual, annualDays, finalComp, totalTaken, dynamicTotalDays]);
+            }); 
+            const ws = XLSX.utils.aoa_to_sheet(d), wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Balances"); XLSX.writeFile(wb, `Balances_${new Date().toLocaleDateString('ar-CA')}.xlsx`); 
+        }
+
+        function showCustomDropdown(inputId, listId) {
+            const listEl = document.getElementById(listId);
+            const data = (inputId === 'newEmpDept') ? uniqueDepts : uniqueCompanies;
+            renderSuggestions(inputId, listId, data);
+            listEl.style.display = 'block';
+        }
+
+        function renderSuggestions(inputId, listId, data) {
+            const listEl = document.getElementById(listId);
+            listEl.innerHTML = "";
+            if (data.length === 0) { listEl.style.display = 'none'; return; }
+            data.forEach(item => {
+                const div = document.createElement('div');
+                div.className = "custom-dropdown-item";
+                div.innerText = item;
+                div.onmousedown = (e) => { e.preventDefault(); document.getElementById(inputId).value = item; listEl.style.display = 'none'; };
+                listEl.appendChild(div);
+            });
+        }
+
+        window.onload = async () => { 
+            const { data: { session } } = await sb.auth.getSession();
+            if (session) {
+                currentUser = session.user;
+                document.getElementById('authOverlay').classList.add('auth-hidden');
+                document.getElementById('appContainer').classList.remove('auth-hidden');
+                document.getElementById('userEmailDisplay').innerText = currentUser.email;
+                await loadAllData();
+            }
+        };
+    </script>
+</body>
+</html>
